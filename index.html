@@ -1,0 +1,313 @@
+<!--
+ComptaPlus - Single-file Frontend (HTML + CSS + jQuery)
+Instructions:
+1. Save this code to a file named `index.html`.
+2. Open locally in a browser (no backend required).
+3. All data is saved to localStorage (clients, products, invoices).
+4. Click "Download PDF" to export an invoice using jsPDF.
+
+Features included:
+- Company settings (name, address, logo URL)
+- Manage Clients
+- Manage Products/Services
+- Create invoice lines (qty, unit price, TVA)
+- Automatic totals (HT, TVA, TTC) and optional Timbre
+- Save invoices and download PDF
+
+Libraries used (CDN):
+- jQuery
+- jsPDF (for PDF generation)
+- jsPDF-AutoTable (for table layout)
+-->
+
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ComptaPlus (Frontend jQuery)</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-..." crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    body{font-family:Inter,Arial,Helvetica,sans-serif;background:#f4f6fb;margin:0;padding:20px}
+    .header{display:flex;align-items:center;gap:12px}
+    .card{background:#fff;border-radius:10px;padding:14px;margin:10px 0;box-shadow:0 6px 18px rgba(20,20,50,0.06)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    input,select,button,textarea{padding:8px;border-radius:6px;border:1px solid #ddd;width:100%;box-sizing:border-box}
+    label{font-size:13px;display:block;margin:6px 0}
+    .small{font-size:13px;color:#555}
+    .inline{display:flex;gap:8px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #eee}
+    .btn{background:#2b6cb0;color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    .danger{background:#e53e3e}
+    .muted{color:#666;font-size:13px}
+    @media(max-width:800px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div style="width:56px;height:56px;border-radius:8px;background:#2b6cb0;color:white;display:flex;align-items:center;justify-content:center;font-weight:700">CP</div>
+    <div>
+      <h1 style="margin:0">ComptaPlus</h1>
+    </div>
+  </div>
+
+  <div class="card grid">
+    <div>
+      <h3>Company settings</h3>
+      <label>Nom de l'entreprise<input id="companyName" placeholder="Ex: Cabinet XYZ"></label>
+      <label>Adresse<textarea id="companyAddress" rows="2"></textarea></label>
+      <label>Logo URL<input id="companyLogo" placeholder="Lien image (optionnel)"></label>
+      <label>TVA par défaut (%)<input id="defaultTva" type="number" value="20"></label>
+      <label>Timbre fixe (DH) (optionnel)<input id="timbre" type="number" value="0"></label>
+      <div class="inline" style="margin-top:10px">
+        <button id="saveSettings" class="btn">Enregistrer</button>
+        <button id="resetApp" class="btn danger">Réinitialiser données</button>
+      </div>
+    </div>
+
+    <div>
+      <h3>Quick actions</h3>
+      <div class="card">
+        <div class="small">Créer rapidement un client</div>
+        <label>Nom<input id="quickClientName"></label>
+        <label>Email<input id="quickClientEmail"></label>
+        <button id="addQuickClient" class="btn">Ajouter client</button>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="small">Créer rapidement un produit</div>
+        <label>Nom<input id="quickProdName"></label>
+        <label>Prix<input id="quickProdPrice" type="number" step="0.01"></label>
+        <label>TVA (%)<input id="quickProdTva" type="number" value="20"></label>
+        <button id="addQuickProd" class="btn">Ajouter produit</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Clients</h3>
+      <div id="clientsList" class="muted">Chargement...</div>
+    </div>
+
+    <div class="card">
+      <h3>Produits / Services</h3>
+      <div id="productsList" class="muted">Chargement...</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Créer facture</h3>
+    <div class="grid">
+      <div>
+        <label>Client
+          <select id="invoiceClient"></select>
+        </label>
+      </div>
+      <div>
+        <label>Numéro facture<input id="invoiceNumber" readonly></label>
+      </div>
+    </div>
+
+    <div id="lines" class="card"></div>
+    <button id="addLine" class="btn">Ajouter ligne</button>
+
+    <div style="margin-top:12px;display:flex;gap:12px">
+      <div style="flex:1">
+        <label>Note<textarea id="invoiceNote"></textarea></label>
+      </div>
+      <div style="width:280px">
+        <label>Total HT<div id="totalHT" class="small">0</div></label>
+        <label>Total TVA<div id="totalTVA" class="small">0</div></label>
+        <label>Timbre<div id="timbreShow" class="small">0</div></label>
+        <label>Total TTC<div id="totalTTC" class="small">0</div></label>
+        <div style="margin-top:10px" class="inline">
+          <button id="saveInvoice" class="btn">Enregistrer</button>
+          <button id="downloadPdf" class="btn">Télécharger PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Factures enregistrées</h3>
+    <div id="invoicesList" class="muted">Aucune</div>
+  </div>
+
+  <script>
+    // Simple storage wrapper
+    const DB = {
+      key(k){return 'comptaplus.'+k},
+      get(k){return JSON.parse(localStorage.getItem(this.key(k))||'null')},
+      set(k,v){localStorage.setItem(this.key(k), JSON.stringify(v))}
+    };
+
+    function uid(){return 'id-'+Math.random().toString(36).slice(2,9)}
+
+    // Defaults
+    if(!DB.get('settings')){
+      DB.set('settings',{companyName:'Ma Société',companyAddress:'',companyLogo:'',defaultTva:20,timbre:0});
+    }
+    if(!DB.get('clients')) DB.set('clients',[]);
+    if(!DB.get('products')) DB.set('products',[]);
+    if(!DB.get('invoices')) DB.set('invoices',[]);
+
+    function renderSettings(){
+      const s = DB.get('settings');
+      $('#companyName').val(s.companyName);
+      $('#companyAddress').val(s.companyAddress);
+      $('#companyLogo').val(s.companyLogo);
+      $('#defaultTva').val(s.defaultTva);
+      $('#timbre').val(s.timbre);
+      $('#timbreShow').text(Number(s.timbre).toFixed(2));
+    }
+
+    function renderClients(){
+      const clients = DB.get('clients')||[];
+      if(clients.length===0) $('#clientsList').text('Aucun client'); else {
+        $('#clientsList').html('<ul>'+clients.map(c=>`<li>${c.name} <span class="muted">${c.email||''}</span></li>`).join('')+'</ul>');
+      }
+      const sel = $('#invoiceClient').empty(); sel.append('<option value="">-- choisir --</option>');
+      clients.forEach(c=>sel.append(`<option value="${c.id}">${c.name}</option>`));
+    }
+
+    function renderProducts(){
+      const products = DB.get('products')||[];
+      if(products.length===0) $('#productsList').text('Aucun produit'); else {
+        $('#productsList').html('<ul>'+products.map(p=>`<li>${p.name} - ${Number(p.price).toFixed(2)} DH (${p.tva||0}% TVA)</li>`).join('')+'</ul>');
+      }
+    }
+
+    function renderInvoices(){
+      const invs = DB.get('invoices')||[];
+      if(invs.length===0) $('#invoicesList').text('Aucune facture'); else {
+        $('#invoicesList').html('<ul>'+invs.map(i=>`<li>${i.invoiceNumber} - ${i.clientName||'--'} - ${i.totalTTC.toFixed(2)} DH <button data-id="${i.id}" class="download">PDF</button></li>`).join('')+'</ul>');
+      }
+    }
+
+    function addLine(data={productName:'',qty:1,unitPrice:0,tva:$('#defaultTva').val()||0}){
+      const id = uid();
+      const $div = $(`<div data-id="${id}" style="padding:8px;border:1px dashed #eee;margin-bottom:8px">
+        <input class="prodName" placeholder="Description" value="${data.productName}">
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input class="qty" type="number" value="${data.qty}" style="width:80px">
+          <input class="unit" type="number" step="0.01" value="${data.unitPrice}" style="width:120px">
+          <input class="tva" type="number" value="${data.tva}" style="width:100px">
+          <button class="remove btn danger" style="width:80px">Suppr</button>
+        </div>
+      </div>`);
+      $div.find('.remove').on('click',()=>{$div.remove();recalc();});
+      $div.find('input').on('input',recalc);
+      $('#lines').append($div);
+      recalc();
+    }
+
+    function recalc(){
+      let totalHT=0, totalTVA=0;
+      $('#lines').children().each(function(){
+        const qty = Number($(this).find('.qty').val()||0);
+        const unit = Number($(this).find('.unit').val()||0);
+        const tva = Number($(this).find('.tva').val()||0);
+        const ht = qty*unit;
+        const tv = ht * (tva/100);
+        totalHT += ht; totalTVA += tv;
+      });
+      const s = DB.get('settings');
+      const tim = Number(s.timbre||0);
+      $('#totalHT').text(totalHT.toFixed(2)+' DH');
+      $('#totalTVA').text(totalTVA.toFixed(2)+' DH');
+      $('#timbreShow').text(tim.toFixed(2)+' DH');
+      $('#totalTTC').text((totalHT+totalTVA+tim).toFixed(2)+' DH');
+    }
+
+    function generateInvoiceNumber(){
+      return 'INV-'+(new Date()).toISOString().replace(/[^0-9]/g,'').slice(0,14);
+    }
+
+    function saveInvoice(toDownload){
+      const invs = DB.get('invoices')||[];
+      const clientId = $('#invoiceClient').val();
+      const clients = DB.get('clients')||[];
+      const client = clients.find(c=>c.id===clientId) || {};
+      let items = [];
+      $('#lines').children().each(function(){
+        items.push({productName:$(this).find('.prodName').val(), qty:Number($(this).find('.qty').val()), unitPrice:Number($(this).find('.unit').val()), tva:Number($(this).find('.tva').val())});
+      });
+      if(items.length===0){alert('Ajoute au moins une ligne');return}
+      const s = DB.get('settings');
+      let totalHT=0,totalTVA=0;
+      items.forEach(it=>{ totalHT+=it.qty*it.unitPrice; totalTVA+= (it.qty*it.unitPrice)*(it.tva/100); });
+      const tim = Number(s.timbre||0);
+      const invoice = {
+        id: uid(), invoiceNumber: $('#invoiceNumber').val()||generateInvoiceNumber(), date:new Date().toISOString(), clientId:client.id || '', clientName:client.name||$('#invoiceClient option:selected').text(), items, totalHT, totalTVA, tim, totalTTC: totalHT+totalTVA+tim, note:$('#invoiceNote').val()
+      };
+      invs.push(invoice); DB.set('invoices',invs); renderInvoices(); if(toDownload) downloadPDF(invoice);
+      alert('Facture enregistrée');
+    }
+
+    async function downloadPDF(inv){
+      const s = DB.get('settings');
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({unit:'pt',format:'a4'});
+      const margin = 40;
+      let y = 40;
+      doc.setFontSize(18); doc.text(s.companyName || 'Ma Société', margin, y); y+=20;
+      doc.setFontSize(10); doc.text(s.companyAddress||'', margin, y); y+=30;
+      doc.setFontSize(12); doc.text('Facture: '+inv.invoiceNumber, 400, 60); doc.text('Date: '+new Date(inv.date).toLocaleDateString(), 400, 78);
+
+      const columns = [
+        {header:'Description', dataKey:'desc'},
+        {header:'Qty', dataKey:'qty'},
+        {header:'PU', dataKey:'pu'},
+        {header:'TVA', dataKey:'tva'},
+        {header:'Total', dataKey:'total'}
+      ];
+      const rows = inv.items.map(it=>({desc:it.productName, qty:it.qty, pu:it.unitPrice.toFixed(2), tva:it.tva+'%', total: (it.qty*it.unitPrice*(1+it.tva/100)).toFixed(2)}));
+      doc.autoTable({startY:120,head: [columns.map(c=>c.header)], body: rows.map(r=>[r.desc,r.qty,r.pu,r.tva,r.total])});
+      const finalY = doc.lastAutoTable.finalY || 120;
+      doc.text(`Total HT: ${inv.totalHT.toFixed(2)} DH`, 400, finalY+30);
+      doc.text(`Total TVA: ${inv.totalTVA.toFixed(2)} DH`, 400, finalY+48);
+      doc.text(`Timbre: ${inv.tim.toFixed(2)} DH`, 400, finalY+66);
+      doc.setFontSize(14); doc.text(`Total TTC: ${inv.totalTTC.toFixed(2)} DH`, 400, finalY+94);
+      doc.save(inv.invoiceNumber+'.pdf');
+    }
+
+    $(function(){
+      renderSettings(); renderClients(); renderProducts(); renderInvoices();
+      $('#invoiceNumber').val(generateInvoiceNumber());
+
+      $('#saveSettings').on('click',()=>{
+        const s = {companyName:$('#companyName').val(), companyAddress:$('#companyAddress').val(), companyLogo:$('#companyLogo').val(), defaultTva:Number($('#defaultTva').val()||0), timbre:Number($('#timbre').val()||0)};
+        DB.set('settings',s); renderSettings(); alert('Paramètres sauvegardés');
+      });
+
+      $('#resetApp').on('click',()=>{if(confirm('Réinitialiser toutes les données ?')){localStorage.clear();location.reload();}});
+
+      $('#addQuickClient').on('click',()=>{
+        const name = $('#quickClientName').val(); if(!name){alert('Nom requis');return}
+        const clients = DB.get('clients')||[]; clients.push({id:uid(),name, email:$('#quickClientEmail').val()}); DB.set('clients',clients); $('#quickClientName').val('');$('#quickClientEmail').val(''); renderClients();
+      });
+
+      $('#addQuickProd').on('click',()=>{
+        const name = $('#quickProdName').val(); if(!name){alert('Nom requis');return}
+        const products = DB.get('products')||[]; products.push({id:uid(),name,price:Number($('#quickProdPrice').val()||0),tva:Number($('#quickProdTva').val()||0)}); DB.set('products',products); $('#quickProdName').val('');$('#quickProdPrice').val(''); renderProducts();
+      });
+
+      $('#addLine').on('click',()=>addLine({productName:'',qty:1,unitPrice:0,tva:$('#defaultTva').val()}));
+
+      $('#saveInvoice').on('click',()=>saveInvoice(false));
+      $('#downloadPdf').on('click',()=>saveInvoice(true));
+
+      // Download individual invoice pdf from list
+      $('#invoicesList').on('click','.download', function(){ const id = $(this).data('id'); const invs = DB.get('invoices')||[]; const inv = invs.find(i=>i.id===id); if(inv) downloadPDF(inv); });
+
+      // initial add line
+      addLine();
+    });
+  </script>
+</body>
+</html>
+
